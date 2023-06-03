@@ -66,23 +66,35 @@ def decode_predictions(scores, geometry):
 
 net = cv2.dnn.readNet(modelFilePath)
 
-stream = cv2.VideoCapture(videoFilePath)
+stream = cv2.VideoCapture(videoFilePath, cv2.CAP_FFMPEG, [cv2.CAP_PROP_HW_ACCELERATION, cv2.VIDEO_ACCELERATION_ANY])
 (W, H) = (None, None)
-(newW, newH) = (320, 320)
+(newW, newH) = (160, 160)
 (rW, rH) = (None, None)
 
-
+prev_frame_time = 0
+new_frame_time = 0
+prev_frame = None
+frame_count = 0
 while True:
+    frame_count += 1
     frame = stream.read()[1]
-    orig = frame.copy()
     if frame is None:
         break
+    if frame_count % 10 != 0:
+        continue
+
+    orig = frame.copy()
+
+    new_frame_time = time.time()
+    fps = 1 / (new_frame_time - prev_frame_time)
+    prev_frame_time = new_frame_time
     (origH, origW) = frame.shape[:2]
-    (newW, newH) = (320, 320)
+    (newW, newH) = (160, 160)
     rW = origW / float(newW)
     rH = origH / float(newH)
     frame = cv2.resize(frame, (newW, newH))
     (H, W) = frame.shape[:2]
+    #frame = cv2.UMat(frame)
     blob = cv2.dnn.blobFromImage(frame, 1.0, (newW, newH), (123.68, 116.78, 103.94), swapRB=True, crop=False)
     net.setInput(blob)
     (scores, geometry) = net.forward(layerNames)
@@ -115,12 +127,16 @@ while True:
     if len(boxes) != 0:
         text = pytesseract.image_to_string(orig, config=("-l nor --oem 1 --psm 3"))
         print(text)
+
     for (startX, startY, endX, endY) in boxes:
         startX = int(startX * rW)
         startY = int(startY * rH)
         endX = int(endX * rW)
         endY = int(endY * rH)
         cv2.rectangle(orig, (startX, startY), (endX, endY), (0, 255, 0), 1)
+
+    cv2.putText(orig, str(int(fps)), (7, 70), cv2.FONT_HERSHEY_SIMPLEX, 1, (100, 255, 0), 2, cv2.LINE_AA)
+    #print(fps)
     cv2.imshow("Gray", orig)
     if cv2.waitKey(1) & 0xFF == ord("q"):
         break  # trykk q for å avbryte
